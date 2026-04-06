@@ -3,10 +3,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 
-try:
-    from genesis.utils import geom as gu
-except ImportError:
-    gu = None  # type: ignore[assignment]  # Only needed for np_pose_mul/np_pose_diff
+from genesis.utils import geom as gu
 
 
 @torch.jit.script

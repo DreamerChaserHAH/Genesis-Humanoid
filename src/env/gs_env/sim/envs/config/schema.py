@@ -1,7 +1,4 @@
-from __future__ import annotations
-
-from typing import Any
-
+import genesis as gs
 import numpy as np
 from gs_schemas.base_types import genesis_pydantic_config
 from pydantic import BaseModel
@@ -20,7 +17,9 @@ class GenesisInitArgs(BaseModel):
     seed: int
     precision: str
     logging_level: str
-    backend: Any  # gs.constants.backend | None — genesis optional for headless deploy
+    backend: (
+        gs.constants.backend | None
+    )  # While we avoid using None, this is an exception where it finds a suitable backend automatically
 
 
 class EnvArgs(BaseModel):
