@@ -1,0 +1,41 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "env", "env", "{C518363F-5036-4587-290B-82EA39A5B2AC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "gs_env", "gs_env", "{37133C4E-0F28-AC1E-2520-6FA3B21B7F6F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "real", "real", "{37A33397-C0E0-4C50-0CBA-033AAFC32E06}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "steamvr", "steamvr", "{5A159FBF-DCB1-B9FB-34D2-55927645FA7C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SteamVRPoseStreamer", "src\env\gs_env\real\steamvr\SteamVRPoseStreamer\SteamVRPoseStreamer.csproj", "{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C518363F-5036-4587-290B-82EA39A5B2AC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{37133C4E-0F28-AC1E-2520-6FA3B21B7F6F} = {C518363F-5036-4587-290B-82EA39A5B2AC}
+		{37A33397-C0E0-4C50-0CBA-033AAFC32E06} = {37133C4E-0F28-AC1E-2520-6FA3B21B7F6F}
+		{5A159FBF-DCB1-B9FB-34D2-55927645FA7C} = {37A33397-C0E0-4C50-0CBA-033AAFC32E06}
+		{F3AEDEFA-8033-D8C6-BF71-EE862446DFE6} = {5A159FBF-DCB1-B9FB-34D2-55927645FA7C}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6D2AF32A-4BA8-4E2B-AB26-0A6750B492BD}
+	EndGlobalSection
+EndGlobal

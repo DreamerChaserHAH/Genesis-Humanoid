@@ -1,3 +1,5 @@
+import socket
+import struct
 import threading
 import time
 
@@ -17,12 +19,17 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 
 from gs_env.sim.robots.config.schema import HumanoidRobotArgs
 
-from .low_state_handler import LowStateMsgHandler
+from .low_state_handler import LowStateMsgHandler, _NUM_MOTORS
+
+# UDP bridge lowcmd format (must match deploy/dds_bridge_nx.py)
+_LOWCMD_FMT = f"<2B{_NUM_MOTORS}B{_NUM_MOTORS}f{_NUM_MOTORS}f{_NUM_MOTORS}f{_NUM_MOTORS}f{_NUM_MOTORS}f"
 
 
 class LowStateCmdHandler(LowStateMsgHandler):
-    def __init__(self, cfg: HumanoidRobotArgs, freq: int = 1000) -> None:
-        super().__init__(cfg, freq)
+    def __init__(
+        self, cfg: HumanoidRobotArgs, freq: int = 1000, bridge_ip: str | None = None
+    ) -> None:
+        super().__init__(cfg, freq, bridge_ip=bridge_ip)
 
         kp_groups = self.cfg.dof_kp
         self.kp = [
@@ -80,6 +87,10 @@ class LowStateCmdHandler(LowStateMsgHandler):
     def init(self) -> None:
         super().init()
 
+        if self.bridge_ip is not None:
+            self._init_bridge_cmd()
+            return
+
         if self.robot_name == "go2":
             self.lidar_switch_publisher = ChannelPublisher("rt/utlidar/switch", String_)
             self.lidar_switch_publisher.Init()
@@ -103,8 +114,15 @@ class LowStateCmdHandler(LowStateMsgHandler):
         self.msc.SetTimeout(5.0)
         self.msc.Init()
 
+    def _init_bridge_cmd(self) -> None:
+        """Initialize UDP bridge mode for sending commands."""
+        self._bridge_send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._bridge_cmd_addr = (self.bridge_ip, 9502)
+        print(f"[bridge] Sending lowcmd UDP to {self.bridge_ip}:9502")
+
     def start(self) -> None:
-        self.msc.ReleaseMode()
+        if self.bridge_ip is None:
+            self.msc.ReleaseMode()
 
         self.full_initial_dof_pos = self.full_joint_pos.copy()
         self.full_initial_dof_pos[-1] += self._right_wrist_offset
@@ -199,7 +217,10 @@ class LowStateCmdHandler(LowStateMsgHandler):
                 1,
             ]
             self.low_cmd.mode_pr = 0  # 0 for pitch roll, 1 for A B
-            self.low_cmd.mode_machine = self.msg.mode_machine
+            if self.bridge_ip is not None:
+                self.low_cmd.mode_machine = self._bridge_mode_machine
+            else:
+                self.low_cmd.mode_machine = self.msg.mode_machine
             for i in range(29):
                 self.low_cmd.motor_cmd[i].mode = 1  # 1:Enable, 0:Disable
                 self.low_cmd.motor_cmd[i].q = self.full_initial_dof_pos[i]
@@ -268,8 +289,26 @@ class LowStateCmdHandler(LowStateMsgHandler):
         else:
             self.set_cmd()
 
-        self.low_cmd.crc = self.crc.Crc(self.low_cmd)
-        self.lowcmd_publisher.Write(self.low_cmd)
+        if self.bridge_ip is not None:
+            self._bridge_send_cmd()
+        else:
+            self.low_cmd.crc = self.crc.Crc(self.low_cmd)
+            self.lowcmd_publisher.Write(self.low_cmd)
+
+    def _bridge_send_cmd(self) -> None:
+        """Send low_cmd via UDP to the NX bridge (which computes CRC and publishes DDS)."""
+        motor_mode = [self.low_cmd.motor_cmd[i].mode for i in range(_NUM_MOTORS)]
+        motor_q = [self.low_cmd.motor_cmd[i].q for i in range(_NUM_MOTORS)]
+        motor_dq = [self.low_cmd.motor_cmd[i].dq for i in range(_NUM_MOTORS)]
+        motor_kp = [self.low_cmd.motor_cmd[i].kp for i in range(_NUM_MOTORS)]
+        motor_kd = [self.low_cmd.motor_cmd[i].kd for i in range(_NUM_MOTORS)]
+        motor_tau = [self.low_cmd.motor_cmd[i].tau for i in range(_NUM_MOTORS)]
+        packet = struct.pack(
+            _LOWCMD_FMT,
+            self.low_cmd.mode_pr, self.low_cmd.mode_machine,
+            *motor_mode, *motor_q, *motor_dq, *motor_kp, *motor_kd, *motor_tau,
+        )
+        self._bridge_send_sock.sendto(packet, self._bridge_cmd_addr)
 
     def emergency_stop(self) -> None:
         self._emergency_stop = True

@@ -1,6 +1,7 @@
-from typing import TypeAlias
+from __future__ import annotations
 
-import genesis as gs
+from typing import Any, TypeAlias
+
 from gs_schemas.base_types import genesis_pydantic_config
 from pydantic import BaseModel
 
@@ -64,7 +65,7 @@ class MeshObjectArgs(BaseModel):
     up: tuple[int, int, int]
     front: tuple[int, int, int]
     scale: float
-    coacd_options: gs.options.misc.CoacdOptions
+    coacd_options: Any  # gs.options.misc.CoacdOptions
 
 
 class PartNetMobilityObjectArgs(MeshObjectArgs):

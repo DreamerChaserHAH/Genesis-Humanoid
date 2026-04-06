@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 from typing import Any, TypeAlias
 
-import genesis as gs
 from gs_schemas.base_types import genesis_pydantic_config
 from pydantic import BaseModel
 
@@ -12,14 +13,14 @@ class BaseSceneArgs(BaseModel):
 
     scene_type: str
 
-    sim_options: gs.options.SimOptions
-    tool_options: gs.options.ToolOptions
-    rigid_options: gs.options.RigidOptions
-    mpm_options: gs.options.MPMOptions
-    fem_options: gs.options.FEMOptions
-    sf_options: gs.options.SFOptions
-    vis_options: gs.options.VisOptions
-    viewer_options: gs.options.ViewerOptions
+    sim_options: Any  # gs.options.SimOptions
+    tool_options: Any  # gs.options.ToolOptions
+    rigid_options: Any  # gs.options.RigidOptions
+    mpm_options: Any  # gs.options.MPMOptions
+    fem_options: Any  # gs.options.FEMOptions
+    sf_options: Any  # gs.options.SFOptions
+    vis_options: Any  # gs.options.VisOptions
+    viewer_options: Any  # gs.options.ViewerOptions
 
     show_viewer: bool
     show_FPS: bool

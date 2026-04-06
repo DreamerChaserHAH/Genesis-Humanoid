@@ -4,6 +4,58 @@ from pathlib import Path
 
 import fire
 import torch
+
+# Install a genesis stub so deploy works without the simulator installed.
+# The real robot path never calls genesis functions — only the config schemas
+# reference genesis types for Pydantic annotations.
+try:
+    import genesis  # noqa: F401
+except ImportError:
+    import types
+
+    class _GenesisStub(types.ModuleType):
+        """Minimal stub so `from genesis.x.y import Z` doesn't crash."""
+        _PASSTHROUGH = {"__file__", "__loader__", "__spec__", "__builtins__"}
+
+        def __init__(self, name: str = "genesis") -> None:
+            super().__init__(name)
+            self.__path__: list[str] = []
+            self.__package__ = name
+            self.__file__ = f"<genesis-stub:{name}>"
+
+        def __getattr__(self, name: str) -> "_GenesisStub":
+            if name in self._PASSTHROUGH:
+                raise AttributeError(name)
+            sub = _GenesisStub(f"{self.__name__}.{name}")
+            setattr(self, name, sub)
+            sys.modules[sub.__name__] = sub
+            return sub
+
+        def __call__(self, *a: object, **kw: object) -> "_GenesisStub":
+            return _GenesisStub()
+
+    # Pre-register all genesis submodules referenced in the codebase
+    _root = _GenesisStub()
+    _submodules = [
+        "genesis.engine", "genesis.engine.materials", "genesis.engine.materials.base",
+        "genesis.engine.entities", "genesis.engine.entities.base_entity",
+        "genesis.engine.entities.rigid_entity",
+        "genesis.engine.solvers", "genesis.engine.solvers.rigid",
+        "genesis.engine.solvers.rigid.rigid_solver_decomp",
+        "genesis.options", "genesis.options.morphs", "genesis.options.surfaces",
+        "genesis.options.misc",
+        "genesis.utils", "genesis.utils.geom",
+        "genesis.constants",
+    ]
+    sys.modules["genesis"] = _root
+    for _name in _submodules:
+        _stub = _GenesisStub(_name)
+        sys.modules[_name] = _stub
+        # Wire parent→child attribute
+        _parts = _name.split(".")
+        _parent = sys.modules[".".join(_parts[:-1])]
+        setattr(_parent, _parts[-1], _stub)
+
 from gs_env.common.utils.math_utils import (
     quat_apply,
     quat_diff,
@@ -13,7 +65,6 @@ from gs_env.common.utils.math_utils import (
     quat_from_euler,
 )
 from gs_env.common.utils.motion_utils import build_motion_obs_from_dict
-from gs_env.sim.envs.config.registry import EnvArgsRegistry
 from gs_env.sim.envs.config.schema import MotionEnvArgs
 
 # Add examples to path to import utils
@@ -76,6 +127,7 @@ def main(
     sim: bool = True,
     view: bool = False,
     action_scale: float = 0.0,  # only for real robot
+    bridge_ip: str | None = None,  # NX IP for UDP bridge (WiFi mode)
     redis_url: str = "redis://localhost:6379/0",
     redis_key: str = "motion:ref:latest",
     rate_limit: float = 100.0,
@@ -98,6 +150,8 @@ def main(
     device = "cpu" if not torch.cuda.is_available() else device
 
     if view:
+        from gs_env.sim.envs.config.registry import EnvArgsRegistry
+
         policy = None
         env_args = EnvArgsRegistry["g1_motion"]
     else:
@@ -146,6 +200,7 @@ def main(
             interactive=True,
             device=torch.device(device),
             xml_path="assets/robot/unitree_g1/g1_mocap_29dof.xml",
+            bridge_ip=bridge_ip,
         )
 
         print("Press Start button to start the policy")

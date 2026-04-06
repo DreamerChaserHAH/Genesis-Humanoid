@@ -21,15 +21,16 @@ class UnitreeLeggedEnv(BaseGymRobot):
         interactive: bool = False,
         device: torch.device = _DEFAULT_DEVICE,
         xml_path: str | None = None,
+        bridge_ip: str | None = None,
     ) -> None:
         super().__init__()
         self._args = args
         if interactive:
-            self._robot = LowStateCmdHandler(args.robot_args)
+            self._robot = LowStateCmdHandler(args.robot_args, bridge_ip=bridge_ip)
             self._robot.init()
             self._robot.start()
         else:
-            self._robot = LowStateMsgHandler(args.robot_args)
+            self._robot = LowStateMsgHandler(args.robot_args, bridge_ip=bridge_ip)
             self._robot.init()
         self.real_time_fk = False
         if xml_path is not None:

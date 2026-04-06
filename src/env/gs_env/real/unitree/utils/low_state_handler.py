@@ -1,3 +1,4 @@
+import socket
 import struct
 import threading
 import time
@@ -9,6 +10,11 @@ from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as LowState_go
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as LowState_hg
 
 from gs_env.sim.robots.config.schema import HumanoidRobotArgs
+
+# UDP bridge constants (must match deploy/dds_bridge_nx.py)
+_NUM_MOTORS = 29
+_LOWSTATE_FMT = f"<4f3f{_NUM_MOTORS}f{_NUM_MOTORS}f{_NUM_MOTORS}f{_NUM_MOTORS}I40sB"
+_LOWSTATE_SIZE = struct.calcsize(_LOWSTATE_FMT)
 
 JointID = {
     "go2": {
@@ -100,9 +106,12 @@ JointID = {
 
 
 class LowStateMsgHandler:
-    def __init__(self, cfg: HumanoidRobotArgs, freq: int = 1000) -> None:
+    def __init__(
+        self, cfg: HumanoidRobotArgs, freq: int = 1000, bridge_ip: str | None = None
+    ) -> None:
         self.cfg = cfg
         self.update_interval = 1.0 / freq
+        self.bridge_ip = bridge_ip  # If set, use UDP bridge instead of DDS
         if "g1" in cfg.morph_args.file:
             self.robot_name = "g1"
         elif "go2" in cfg.morph_args.file:
@@ -171,8 +180,20 @@ class LowStateMsgHandler:
         self._right_wrist_offset = -0.0
 
     def init(self) -> None:
+        if self.bridge_ip is not None:
+            self._init_bridge()
+        else:
+            self._init_dds()
+        while not self.msg_received:
+            print("Waiting for Low State Message...")
+            time.sleep(0.5)
+        print("Low State Message Received!!!")
+        if self.bridge_ip is None:
+            self.main_thread.start()  # Bridge mode parses in recv loop
+
+    def _init_dds(self) -> None:
         try:
-            ChannelFactoryInitialize(0, "enx2c16dbaafd43")  # MANUAL SET NETWORK INTERFACE
+            ChannelFactoryInitialize(0, "eno1")  # MANUAL SET NETWORK INTERFACE
         except Exception:
             pass
 
@@ -182,12 +203,55 @@ class LowStateMsgHandler:
         elif self.robot_name == "g1":
             self.robot_lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_hg)
             self.robot_lowstate_subscriber.Init(self.LowStateHandler_hg, 10)
-        while not self.msg_received:
-            print("Waiting for Low State Message...")
-            time.sleep(0.5)
-        print("Low State Message Received!!!")
 
-        self.main_thread.start()
+    def _init_bridge(self) -> None:
+        """Initialize UDP bridge mode — receive lowstate from dds_bridge_nx.py."""
+        self._bridge_recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._bridge_recv_sock.bind(("0.0.0.0", 9501))
+        print(f"[bridge] Listening for lowstate UDP on port 9501")
+        bridge_thread = threading.Thread(target=self._bridge_recv_loop, daemon=True)
+        bridge_thread.start()
+
+    def _bridge_recv_loop(self) -> None:
+        """Receive lowstate packets from NX bridge and parse them."""
+        while True:
+            data, _ = self._bridge_recv_sock.recvfrom(2048)
+            if len(data) != _LOWSTATE_SIZE:
+                continue
+            values = struct.unpack(_LOWSTATE_FMT, data)
+            idx = 0
+            self.quat = np.array(values[idx : idx + 4]); idx += 4
+            self.ang_vel = np.array(values[idx : idx + 3]); idx += 3
+            motor_q = values[idx : idx + _NUM_MOTORS]; idx += _NUM_MOTORS
+            motor_dq = values[idx : idx + _NUM_MOTORS]; idx += _NUM_MOTORS
+            motor_tau = values[idx : idx + _NUM_MOTORS]; idx += _NUM_MOTORS
+            motor_reserve = values[idx : idx + _NUM_MOTORS]; idx += _NUM_MOTORS
+            wireless_remote = values[idx]; idx += 1
+            self._bridge_mode_machine = values[idx]; idx += 1
+
+            # Update joint state (same logic as parse_motor_state)
+            for i in range(self.num_dof):
+                self.joint_pos_raw[i] = motor_q[self.dof_index[i]]
+                self.joint_pos[i] += self.low_pass_alpha * (
+                    self.joint_pos_raw[i] - self.joint_pos[i]
+                )
+                self.joint_vel_raw[i] = motor_dq[self.dof_index[i]]
+                self.joint_vel[i] += self.low_pass_alpha * (
+                    self.joint_vel_raw[i] - self.joint_vel[i]
+                )
+                self.torque[i] = motor_tau[self.dof_index[i]]
+                error_code = motor_reserve[self.dof_index[i]]
+                if error_code != 0:
+                    print(f"Joint {self.dof_index[i]} Error Code: {error_code}")
+            for i in range(self.num_full_dof):
+                self.full_joint_pos[i] = motor_q[i]
+            self.full_joint_pos[-1] = motor_q[_NUM_MOTORS - 1] - self._right_wrist_offset
+
+            # Parse wireless remote
+            self.parse_key(wireless_remote)
+            self.parse_botton(wireless_remote[2], wireless_remote[3])
+
+            self.msg_received = True
 
     def LowStateHandler_go(self, msg: LowState_go) -> None:
         self.msg = msg
