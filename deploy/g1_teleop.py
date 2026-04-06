@@ -61,7 +61,7 @@ def load_checkpoint_and_env_args(
 
     print(f"Loading checkpoint from: {ckpt_path}")
     # Load policy
-    policy = torch.jit.load(str(ckpt_path))
+    policy = torch.jit.load(str(ckpt_path), map_location=device)
     policy.to(device)
     policy.eval()
 
