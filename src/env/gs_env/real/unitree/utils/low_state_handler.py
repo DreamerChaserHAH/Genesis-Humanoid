@@ -141,6 +141,11 @@ class LowStateMsgHandler:
             self.num_full_dof = 29
             self.full_joint_pos = np.zeros(29)
 
+        # Pre-allocated buffers for vectorized motor parsing
+        self._full_q_buf = np.zeros(self.num_full_dof)
+        self._full_dq_buf = np.zeros(self.num_full_dof)
+        self._dof_index_arr = np.array(self.dof_index, dtype=np.intp)
+
         # button
         self.L1 = 0
         self.L2 = 0
@@ -264,6 +269,8 @@ class LowStateMsgHandler:
     def main_loop(self) -> None:
         total_publish_cnt = 0  # noqa: F841
         start_time = time.time()  # noqa: F841
+        # Parse state at 200Hz instead of 1000Hz to reduce GIL contention
+        parse_interval = max(self.update_interval, 1.0 / 200)
         while True:
             update_start_time = time.time()
 
@@ -273,8 +280,8 @@ class LowStateMsgHandler:
             self.parse_wireless_remote(self.msg.wireless_remote)
 
             cur_time = time.time()
-            if cur_time - update_start_time < self.update_interval:
-                time.sleep(self.update_interval - (cur_time - update_start_time))
+            if cur_time - update_start_time < parse_interval:
+                time.sleep(parse_interval - (cur_time - update_start_time))
 
             # Print publishing rate
             # total_publish_cnt += 1
@@ -290,20 +297,24 @@ class LowStateMsgHandler:
         self.ang_vel = np.array(imu_state.gyroscope)
 
     def parse_motor_state(self, motor_state: Any) -> None:
-        for i in range(self.num_dof):
-            self.joint_pos_raw[i] = motor_state[self.dof_index[i]].q
-            self.joint_pos[i] += self.low_pass_alpha * (self.joint_pos_raw[i] - self.joint_pos[i])
-            self.joint_vel_raw[i] = motor_state[self.dof_index[i]].dq
-            self.joint_vel[i] += self.low_pass_alpha * (self.joint_vel_raw[i] - self.joint_vel[i])
-            self.torque[i] = motor_state[self.dof_index[i]].tau_est
-            # self.temperature[i] = motor_state[self.dof_index[i]].temperature
-            error_code = motor_state[self.dof_index[i]].reserve[0]
-            if error_code != 0:
-                print(f"Joint {self.dof_index[i]} Error Code: {error_code}")
+        # Vectorized: extract all motor data in bulk to minimize GIL holding time
         for i in range(self.num_full_dof):
-            self.full_joint_pos[i] = motor_state[i].q
-        # print("low_state_big_flag", self.robot_low_state.bit_flag)
-        self.full_joint_pos[-1] = motor_state[-1].q - self._right_wrist_offset
+            self._full_q_buf[i] = motor_state[i].q
+            self._full_dq_buf[i] = motor_state[i].dq
+        for i in range(self.num_dof):
+            idx = self.dof_index[i]
+            self.torque[i] = motor_state[idx].tau_est
+            error_code = motor_state[idx].reserve[0]
+            if error_code != 0:
+                print(f"Joint {idx} Error Code: {error_code}")
+
+        # Vectorized low-pass filter using numpy indexing
+        self.joint_pos_raw[:] = self._full_q_buf[self._dof_index_arr]
+        self.joint_pos += self.low_pass_alpha * (self.joint_pos_raw - self.joint_pos)
+        self.joint_vel_raw[:] = self._full_dq_buf[self._dof_index_arr]
+        self.joint_vel += self.low_pass_alpha * (self.joint_vel_raw - self.joint_vel)
+        self.full_joint_pos[:] = self._full_q_buf
+        self.full_joint_pos[-1] = self._full_q_buf[-1] - self._right_wrist_offset
 
     def parse_botton(self, data1: int, data2: int) -> None:
         self.R1 = (data1 >> 0) & 1

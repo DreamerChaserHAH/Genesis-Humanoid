@@ -77,6 +77,7 @@ def main(
     view: bool = False,
     action_scale: float = 0.0,  # only for real robot
     bridge_ip: str | None = None,  # NX IP for UDP bridge (WiFi mode)
+    multiprocess: bool = False,  # isolate DDS in subprocess (fixes GIL contention on NX)
     redis_url: str = "redis://localhost:6379/0",
     redis_key: str = "motion:ref:latest",
     rate_limit: float = 100.0,
@@ -93,6 +94,7 @@ def main(
         sim: If True, run in simulation. If False, run on real robot.
         view: If True, view motion reference data instead of running policy
         action_scale: Action scaling factor (only for real robot)
+        multiprocess: Isolate DDS in a subprocess (fixes GIL contention on Jetson NX)
         redis_url: Redis URL for motion reference data
         redis_key: Redis key for motion reference data
     """
@@ -148,6 +150,7 @@ def main(
             device=torch.device(device),
             xml_path="assets/robot/unitree_g1/g1_mocap_29dof.xml",
             bridge_ip=bridge_ip,
+            multiprocess=multiprocess,
         )
 
         print("Press Start button to start the policy")

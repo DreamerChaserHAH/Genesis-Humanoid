@@ -8,6 +8,7 @@ from gs_env.common.bases.base_robot import BaseGymRobot
 from gs_env.common.utils.math_utils import quat_from_euler, quat_to_euler, quat_to_rotation_6D
 from gs_env.real.unitree.utils.low_state_controller import LowStateCmdHandler
 from gs_env.real.unitree.utils.low_state_handler import LowStateMsgHandler
+from gs_env.real.unitree.utils.multiprocess_handler import MultiprocessCmdHandler
 from gs_env.sim.envs.config.schema import LeggedRobotEnvArgs
 
 _DEFAULT_DEVICE = torch.device("cpu")
@@ -22,11 +23,16 @@ class UnitreeLeggedEnv(BaseGymRobot):
         device: torch.device = _DEFAULT_DEVICE,
         xml_path: str | None = None,
         bridge_ip: str | None = None,
+        multiprocess: bool = False,
     ) -> None:
         super().__init__()
         self._args = args
+        self._interactive = interactive
         if interactive:
-            self._robot = LowStateCmdHandler(args.robot_args, bridge_ip=bridge_ip)
+            if multiprocess:
+                self._robot = MultiprocessCmdHandler(args.robot_args)
+            else:
+                self._robot = LowStateCmdHandler(args.robot_args, bridge_ip=bridge_ip)
             self._robot.init()
             self._robot.start()
         else:
@@ -61,7 +67,7 @@ class UnitreeLeggedEnv(BaseGymRobot):
                         self._action_scale[i] = dof_torque_limit[key] / dof_kp[key]
                         break
         self._action_scale *= self._args.robot_args.action_scale
-        if isinstance(self.robot, LowStateCmdHandler):
+        if self._interactive:
             self.prev_target_pos = np.array(self.robot.default_dof_pos, dtype=np.float32)
             self.target_vel_low_pass = np.zeros_like(self.robot.default_dof_pos, dtype=np.float32)
         self.low_pass_alpha = self._args.robot_args.low_pass_alpha
@@ -71,7 +77,7 @@ class UnitreeLeggedEnv(BaseGymRobot):
         pass
 
     def apply_action(self, action: torch.Tensor) -> None:
-        if not isinstance(self.robot, LowStateCmdHandler):
+        if not self._interactive:
             raise RuntimeError("apply_action is only available in interactive mode.")
         action_np = action[0].cpu().numpy()
         target_pos = (
@@ -91,7 +97,7 @@ class UnitreeLeggedEnv(BaseGymRobot):
         return self.robot.is_emergency_stop
 
     @property
-    def robot(self) -> LowStateCmdHandler | LowStateMsgHandler:
+    def robot(self) -> LowStateCmdHandler | LowStateMsgHandler | MultiprocessCmdHandler:
         return self._robot  # type: ignore
 
     @property
