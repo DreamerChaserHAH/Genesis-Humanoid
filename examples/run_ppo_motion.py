@@ -250,14 +250,10 @@ def evaluate_policy(
         while True:
             env.time_since_reset[0] = 0.0
             env.hard_reset_motion(
-                torch.IntTensor(
-                    [
-                        0,
-                    ]
-                ),
+                torch.tensor([0], dtype=torch.int, device=env.device),
                 motion_id,
             )
-            env.hard_sync_motion(torch.IntTensor([0]))
+            env.hard_sync_motion(torch.tensor([0], dtype=torch.int, device=env.device))
             obs = wrapped_env.obs
             while (
                 env.motion_times[0]
@@ -271,7 +267,7 @@ def evaluate_policy(
                 env.apply_action(action)
                 terminated = env.get_terminated()
                 if terminated[0]:
-                    env.hard_sync_motion(torch.IntTensor([0]))
+                    env.hard_sync_motion(torch.tensor([0], dtype=torch.int, device=env.device))
                 env.update_history()
                 wrapped_env.update_obs_history()
                 obs = wrapped_env.obs
@@ -294,9 +290,9 @@ def evaluate_policy(
                 env.scene.scene.clear_debug_objects()
                 for i in range(len(env.robot.foot_links_idx)):
                     env.scene.scene.draw_debug_arrow(
-                        env.link_positions[0, env.robot.foot_links_idx[i]],
-                        env.foot_contact_weighted[0, i]
-                        * torch.tensor([0.0, 0.0, 1.0], device=env.device),
+                        env.link_positions[0, env.robot.foot_links_idx[i]].cpu(),
+                        (env.foot_contact_weighted[0, i]
+                        * torch.tensor([0.0, 0.0, 1.0], device=env.device)).cpu(),
                         radius=0.01,
                         color=(0.0, 1.0, 0.0),
                     )
@@ -306,9 +302,9 @@ def evaluate_policy(
                     foot_link_pos = quat_apply(ref_quat_yaw, foot_link_pos)
                     foot_link_pos += env.ref_base_pos
                     env.scene.scene.draw_debug_arrow(
-                        foot_link_pos,
-                        env.ref_foot_contact[0, i]
-                        * torch.tensor([0.0, 0.0, 0.5], device=env.device),
+                        foot_link_pos.cpu(),
+                        (env.ref_foot_contact[0, i]
+                        * torch.tensor([0.0, 0.0, 0.5], device=env.device)).cpu(),
                         radius=0.01,
                         color=(0.0, 0.0, 1.0),
                     )
