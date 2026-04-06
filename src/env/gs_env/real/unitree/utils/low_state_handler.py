@@ -269,8 +269,7 @@ class LowStateMsgHandler:
     def main_loop(self) -> None:
         total_publish_cnt = 0  # noqa: F841
         start_time = time.time()  # noqa: F841
-        # Parse state at 200Hz instead of 1000Hz to reduce GIL contention
-        parse_interval = max(self.update_interval, 1.0 / 200)
+        parse_interval = self.update_interval
         while True:
             update_start_time = time.time()
 
